@@ -1,4 +1,32 @@
 import ollama
+from abc import abstractmethod
+
+
+class LLMInterface:
+    @abstractmethod
+    def convert(self, constraint_prompt: str, model: str) -> list[tuple[str, int]]:
+        """"""
+
+    @abstractmethod
+    def verify(self, predicate: str, val: str, model: str) -> bool:
+        """"""
+
+
+class OllamaLLM(LLMInterface):
+    PROMPT_FOLDER_PATH = "./prompts"
+    CONVERT_FILENAME = "CONVERT_V1"
+    VERIFY_FILENAME = "VERIFY_V1"
+
+    def __init__(self):
+        self.__convert_prompt = ""
+        with open(OllamaLLM.PROMPT_FOLDER_PATH + OllamaLLM.CONVERT_FILENAME, "r") as file:
+            file.readline()
+
+    def convert(self, constraint_prompt: str, model: str) -> list[tuple[str, int]]:
+        pass
+
+    def verify(self, predicate: str, val: str, model: str) -> bool:
+        pass
 
 
 def convert(constraint_prompt: str, model: str) -> list[tuple[str, int]]:
@@ -38,7 +66,28 @@ def convert(constraint_prompt: str, model: str) -> list[tuple[str, int]]:
 
 
 def verify(predicate: str, val: str, model: str) -> bool:
-    pass
+    verify_prompt = "You are a service being used as part of a distributed software application. This service is run " \
+                    "on every process in the network. You are responsible for processing a given input to a defined " \
+                    "function and providing an output according to the function descriptions. For this reason, your " \
+                    "reply must be exactly according to the output spec described. The application is a distributed " \
+                    "constrained consensus solver. Users would like to coordinate with each other to agree on a value. " \
+                    "Each user provides their constraints to their agent/process on what the value can be. These agents " \
+                    "then communicate and arrive at consensus on a value that satisfies constraints. Some constraints " \
+                    "can be specified as \"relaxable\", meaning they are allowed to be removed, with some positive penalty " \
+                    "cost, if the constraints cannot be satisfied. Ideally, we would like the penalty to be 0, or " \
+                    "otherwise as low as possible.
+
+- Your function is called verify.
+- The first input to the function is a string representing a constraint as a formal or semi-formal predicate
+- The second input to the function is a value v represented as a string
+- The function outputs “TRUE” if v satisfies the predicate
+- The function outputs “FALSE” if v does not satisfy the predicate
+- Your output should include the function output and NOTHING ELSE
+
+Here is the function call you are currently resolving:
+
+verify("PROMPT", “14:00”)
+"
 
 
 def evaluate_determinism():
