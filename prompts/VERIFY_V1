@@ -9,4 +9,4 @@ You are a service being used as part of a distributed software application. This
 
 Here is the function call you are currently resolving:
 
-verify("{}", “{}}”)
+verify("{}", “{}”)
