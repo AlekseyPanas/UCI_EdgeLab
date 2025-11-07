@@ -60,7 +60,7 @@ class ConstrainedConsensusProc(Process):
         self._n = len(self._all_pids)
 
         self.__constraints = set()
-        self.__desired_interval = 2 * 60 * 60
+        self.__desired_interval = 0.5 * 60 * 60
         self.__received_pids = set()
 
         self.__lock = Lock()
@@ -95,12 +95,13 @@ class ConstrainedConsensusProc(Process):
         self.__lock.release()
 
     def __solve_csp(self) -> tuple[float, float]:
+        cur_time = time.time()
+        srt_constraints = self.__constraints
+
         while True:
-            cur_time = time.time()
+            srt_constraints = sorted(srt_constraints)
 
-            srt_constraints = sorted(self.__constraints)
-
-            if (srt_constraints[0][0] - cur_time) <= self.__desired_interval:
+            if len(srt_constraints) == 0 or (srt_constraints[0][0] - cur_time) >= self.__desired_interval:
                 result = (cur_time, cur_time + self.__desired_interval)
                 self.debug(f"Solved CSP with value {result}")
                 return result
