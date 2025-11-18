@@ -39,6 +39,17 @@ Implementation details:
 - Leader waits for all processes to send constraints
 - Leader solves CSP locally and proposes a valid value
 - Done
+
+TODO: Additional ping ponging comes from
+    TODO: Compromise as a function of others (Ill only relax if others do)
+    TODO: Dont know weaker constraints ahead of time
+    TODO: Ping pong to debate who will relax
+
+    TODO: Size of transfer and privacy
+Heatmap of venn diagrams (i.e each point in decision space for each process has a score of how desirable it is +
+    second heatmap is a compromise layer (weights)
+
+Normalization of penalties across LLMs is pairwise communication, i.e who should relax
 """
 import datetime
 
