@@ -3,18 +3,24 @@ from router.router import Router, CountXAcksResponseAccumulator, ResponseAccumul
 from typing import Any
 from threading import Lock, Condition
 from abc import abstractmethod
+import ollama
+import itertools
 
 
 class ChoiceEngine:
     @abstractmethod
-    def get_choices(self, D: Any) -> tuple[Any, Any]:
-        """Given a choice set D defined in the manner expected by this engine, return a set of choices given
+    def get_choices(self) -> tuple[Any, Any]:
+        """From the internally injected choice set D defined in the manner expected by this engine, return a set of choices given
         current context state and return relevant perception context when making the choice"""
 
     @abstractmethod
-    def add_context(self, src_pid: str, context: Any):
+    def add_context(self, src_pid: str, context: Any, choices: Any):
         """In the manner defined by this engine, a process provides some context. This context can be choice-specific,
-        or choice-independent, as this engine allows"""
+        or choice-independent, as this engine allows. This context comes as a way for src_pid to convince this
+        process that their choice is better. This includes the choices this process made during this round,
+        regardless of what the context applies to"""
+
+    # TODO: Consider having leader share which groups of choices were largely chosen, and the quorum. This is useful context for making local decisions
 
     @abstractmethod
     def compute_intersection(self, choice_sets: set[Any]) -> Any:
@@ -46,14 +52,10 @@ class QProc(Process):
     def __init__(self, pid: str, router: Router, pids: list[str], leader_pid: str, choice_engine: ChoiceEngine):
         super().__init__(pid, router)
         self._engine = choice_engine
-        self._D = None
         self._leader_pid = leader_pid
         self._pids = pids
         self._N = len(self._pids)
         self._is_leader = self._pid == leader_pid
-
-        self._D_lock = Lock()
-        self._D_cond = Condition(self._D_lock)
 
         self._final_choices = None
         self._final_choices_lock = Lock()
@@ -67,12 +69,6 @@ class QProc(Process):
         self.get_router().add_handler(QProc.M_COMMIT, self._commit_handler)
         self.get_router().add_handler(QProc.M_INIT_PER_EXC, self._init_perception_exchange_handler)
         self.get_router().add_handler(QProc.M_PER_EXC, self._perception_exchange_handler)
-
-    def _wait_for_D(self):
-        self._D_lock.acquire()
-        if self._D is None:
-            self._D_cond.wait()
-        self._D_lock.release()
 
     def _broadcast_get_choices(self):
         rnd = 0
@@ -111,8 +107,7 @@ class QProc(Process):
                     await_relevant.wait_for()
 
     def _get_choices_req_handler(self, src_pid: str, broadcast_id: int):
-        self._wait_for_D()
-        self._latest_choices, self._latest_choices_context = self._engine.get_choices(self._D)
+        self._latest_choices, self._latest_choices_context = self._engine.get_choices()
         self.get_router().send_res(src_pid, broadcast_id, {"choices": self._latest_choices})
 
     def _commit_handler(self, src_pid: str, choices: Any):
@@ -125,23 +120,17 @@ class QProc(Process):
     def _init_perception_exchange_handler(self, src_pid: str, broadcast_id: int):
         # Send my perception to everyone except myself, wait for ACKs, then ACK to leader that I'm done sharing perception
         await_all = CountXAcksResponseAccumulator(self._N - 1)
-        self.get_router().send_req(self._other_pids, QProc.M_PER_EXC, {"context": self._latest_choices_context}, await_all)
+        self.get_router().send_req(self._other_pids, QProc.M_PER_EXC, {"context": self._latest_choices_context, "choices": self._latest_choices}, await_all)
         await_all.wait_for()
         self.get_router().send_res(src_pid, broadcast_id, dict())
 
-    def _perception_exchange_handler(self, src_pid: str, broadcast_id: int, context: Any):
+    def _perception_exchange_handler(self, src_pid: str, broadcast_id: int, context: Any, choices: Any):
         # Add the provided context to my choice engine and ACK the context sender
-        self._engine.add_context(src_pid, context)
+        self._engine.add_context(src_pid, context, choices)
         self.get_router().send_res(src_pid, broadcast_id, dict())
 
     """============== PUBLIC =============="""
-    def inject_D(self, D: Any):
-        self._D = D
-
-        self._D_lock.acquire()
-        self._D_cond.notify_all()
-        self._D_lock.release()
-
+    def start(self):
         if self._is_leader:
             self._broadcast_get_choices()
 
@@ -154,3 +143,50 @@ class QProc(Process):
             temp = self._final_choices
         self._final_choices_lock.release()
         return temp
+
+
+class DiscreteLLMContextEngine(ChoiceEngine):
+    """This engine assumes D is a discrete set of choices, and that LLMs are used to evaluate Q values
+    using association and sensory concepts as described in the research doc"""
+
+    def __init__(self, D: frozenset[str], self_description: str):
+        self.__D = D
+        self.__self_description = self_description
+
+    def get_choices(self) -> tuple[Any, Any]:
+
+        context = {"choice_specific": {}, "self_description": self.__self_description}
+
+    def add_context(self, src_pid: str, context: Any, choices: set[str]):
+        pass
+
+    def compute_intersection(self, choice_sets: set[frozenset[str]]) -> set[str]:
+        choice_sets = list(choice_sets)
+        accum = choice_sets[0]
+        for i in range(1, len(choice_sets)):
+            accum = accum.intersection(choice_sets[i])
+        return accum
+
+    def largest_intersecting_subsets(self, choice_sets: list[frozenset[str]]) -> list[tuple[set[str], set[int]]]:
+        done = False
+        output = []
+        for i in range(len(choice_sets), 0, -1):
+            # Every combination of size i
+            for comb in itertools.combinations(range(len(choice_sets)), i):
+                comb_choice_set = {choice_sets[j] for j in comb}
+                common = self.compute_intersection(comb_choice_set)
+                if not self.is_choice_set_empty(common):
+                    done = True
+                    output.append((common, set(comb)))
+            if done:
+                break
+        return output
+
+    def is_choice_set_empty(self, choices: set[str]):
+        return len(choices) == 0
+
+    def is_subset(self, choices: set[str], of_choices: set[str]):
+        return choices.issubset(of_choices)
+
+
+

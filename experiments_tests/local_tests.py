@@ -4,6 +4,7 @@ from experiments_tests.local_util import create_fully_connected_local_procs
 from router.router import Router, LocalLink
 from proc.hello_proc import HelloProcess
 from proc.constrained_consensus_proc import ConstrainedConsensusProc
+from proc.QProc import QProc, DiscreteLLMContextEngine
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from threading import Thread, Lock, Condition
@@ -108,5 +109,10 @@ def constrained_test():
     vis.run()
 
 
+def qproc_engine_test():
+    engine = DiscreteLLMContextEngine()
+    print(engine.largest_intersecting_subsets([frozenset({"1", "2"}), frozenset({"2", "3"}), frozenset({"4"})]))
+
+
 if __name__ == "__main__":
-    hello_test()
+    qproc_engine_test()
