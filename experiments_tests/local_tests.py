@@ -18,7 +18,7 @@ def hello_test():
     """
 
     # Configure each process with a router and outgoing links for every process
-    PIDS = ["0", "1"]
+    PIDS = ["0", "1", "3"]
     PROCS = create_fully_connected_local_procs(HelloProcess, PIDS)
 
     for proc in PROCS.values():
@@ -109,4 +109,4 @@ def constrained_test():
 
 
 if __name__ == "__main__":
-    constrained_test()
+    hello_test()
