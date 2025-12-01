@@ -5,6 +5,7 @@ from threading import Lock, Condition
 from abc import abstractmethod
 import ollama
 import itertools
+import os
 
 
 class ChoiceEngine:
@@ -148,17 +149,23 @@ class QProc(Process):
 class DiscreteLLMContextEngine(ChoiceEngine):
     """This engine assumes D is a discrete set of choices, and that LLMs are used to evaluate Q values
     using association and sensory concepts as described in the research doc"""
+    PROMPT_PATH = os.path.join(os.getcwd(), "z_prompts/QProcDiscreteLLMContextEngine")
 
-    def __init__(self, D: frozenset[str], self_description: str):
+    def __init__(self, D: frozenset[str], self_description: str, public_self_description: str):
         self.__D = D
         self.__self_description = self_description
+        self.__public_self_description = public_self_description
+        with open(self.PROMPT_PATH, "r") as file:
+            self.__prompt = file.read()
+        self.__contexts = dict()
 
     def get_choices(self) -> tuple[Any, Any]:
 
         context = {"choice_specific": {}, "self_description": self.__self_description}
 
-    def add_context(self, src_pid: str, context: Any, choices: set[str]):
-        pass
+    def add_context(self, src_pid: str, context: dict[str, str], choices: set[str]):
+        if src_pid in self.__contexts:
+            self.__contexts[src_pid] += context
 
     def compute_intersection(self, choice_sets: set[frozenset[str]]) -> set[str]:
         choice_sets = list(choice_sets)

@@ -1,22 +1,7 @@
-You are the following person: "I am a teaching assistant at the university also doing research as a PhD student there. I work in computer science". You are making one of the following choices: Either you
-
-("go out to each and celebrate a publication with the Professor and three PhD students in the lab at 6:00 PM on Friday at a fancy restaurant"
-Here is what you think of this decision: "The restaurant tastes amazing and Im not the one paying for it, although it is a bit further away and I hate dressing nicely. Friday night is relaxing and I can enjoy a drink or two"
-Another person involved in this decision describes themselves as "I am the Professor of the lab" and thinks the following of this decision: "Friday night is relaxing and I can enjoy a drink or two, It is more expensive but it is coming out of lab funds of which there are many, and we deserve this celebration")
-
-OR
-
-("go out to each and celebrate a publication with the Professor and three PhD students in the lab at 3:00 PM on Monday at a fancy restaurant"
-Here is what you think of this decision: "The restaurant tastes amazing and Im not the one paying for it, although it is a bit further away and I hate dressing nicely. Monday afternoon really sucks though because I cant drink, its daytime, and Ill be stressed about work")
-
-OR
-
-("go out to each and celebrate a publication with the Professor and three PhD students in the lab at 6:00 PM on Friday at a cheap restaurant"
-Here is what you think of this decision: "The restaurant tastes okay and is closer and isnt as fancy so I dont have to dress, but such an occasion warrants some extravagancy so Id be disappointed to go cheap. Friday night is relaxing and I can enjoy a drink or two")
-
-OR
-
-("go out to each and celebrate a publication with the Professor and three PhD students in the lab at 3:00 PM on Monday at a cheap restaurant"
-Here is what you think of this decision: "The restaurant tastes okay and is closer and isnt as fancy so I dont have to dress, but such an occasion warrants some extravagancy so Id be disappointed to go cheap. Monday afternoon really sucks though because I cant drink, its daytime, and Ill be stressed about work")
-
-You are now going to evaluate each choice by generating a Q value for each. The brain model we are running is that concepts trigger other concepts by association. e.g "road" --> "cars" --> "noise", etc. This is a graph datastructure. Some nodes in this structure are called "sensory concepts", which are ones that generate "feeling", positive or negative. This feeling will be encoded as a single V value for that specific sensory concept, positive or negative and magnitude indicating sensation strength. For each choice, generate an initial set of all concepts from the choice description, thoughts provided by you and others have on that choice, and the consequences of missing the alternative choices. Then think of associations that this triggers and trace this graph, accumulating all V values along the way into a summed Q. For each V value added, categorize it into one of the following categories and mark that category: empathy (feeling associated with other people, such as guilt from hurting someone or being selfish, or pleasure for making someone happy, etc), selfish short term (positive or negative feelings that are immediate, such as the good taste of ice cream, or the feeling of immediate pain, etc), selfish long term (projected long term consequences such as gaining weight if I eat ice cream, losing my job, or feeling good when I finish this huge project, etc). At the end, Id like to see you output each choice, below each choice draw the graph you are tracing as a bullet point list, for each sensory concept in the graph provide the V value and the category, then at the end give the summed Q of all Vs. Finally at the end, give a list of choice which are tied for the highest Q (usually just one will win, but could be many equivalent ones). For V values, choose a scale that works for you internally, and stick to it.
+You are the following person: "I am Amy. I like candy" You are making a decision with the following people:
+["Person 1 is named Bob. Bob likes Pizza", "Person 2 is named Jim. Jim likes ice cream"]
+The decision includes the following choices and the following opinions of others
+[("Pizza", Bob says "I want pizza because I like pizza", Jim says "I hate pizza, I generally am fine with sweets but salty is a no go right now"),
+("Ice cream", Bob says "Im okay with ice cream but not in the mood right now", Jim says "I want ice cream because I like ice cream"),
+("Candy", Bob says "I hate candy, it hurts my teeth", Jim says "I want ice cream, but if I had a second choice, anything sweet including candy is okay")]
+For each choice, generate a comma separated list of the following tuples in the following format: (<reiterate the choice>, <TRUE if this is in the set of chosen choices, can be multiple, or FALSE otherwise>, "<description of context to explain yourself why you either chose or didn't choose this choice>") In your analysis, consider the following: personal short term reward or pain, personal long term reward or pain (i.e delayed gratification/consequence), reward or pain from missing alternatives, reward or pain from considering others (empathy). Where by pain we simply mean negative reward.
