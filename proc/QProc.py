@@ -74,25 +74,31 @@ class QProc(Process):
     def _broadcast_get_choices(self):
         rnd = 0
         while True:
-            input("Press ENTER to start next round...")
+            # input("Press ENTER to start next round...")
             rnd += 1
+            self.debug(f"Starting round {rnd}")
 
             if self._is_leader:
                 # Ask everyone to return their choices and wait for replies
                 await_all = CountXAcksResponseAccumulator(self._N)
                 self.get_router().send_req(self._pids, QProc.M_GET_CHOICES, dict(), await_all)
+                self.debug(f"Broadcasted M_GET_CHOICES request, waiting for replies from all...")
                 pid_to_choices_dict = await_all.wait_for()
                 pid_to_choices_dict = {pid: pid_to_choices_dict[pid]["choices"] for pid in pid_to_choices_dict}
 
                 # Compute the intersection of everyone's choices
                 common_choices = self._engine.compute_intersection(set(pid_to_choices_dict.values()))
+                self.debug(f"Got replies! {pid_to_choices_dict}")
+                self.debug(f"Computed intersection! {common_choices}")
 
                 # Commit if intersection is not empty
                 if not self._engine.is_choice_set_empty(common_choices):
+                    self.debug(f"Sending commit to all... {common_choices}")
                     self.get_router().send_req(self._pids, QProc.M_COMMIT, {"choices": common_choices})
                     break
                 # TODO: Fix this, currently naively terminates with an empty choice set after 5 rounds
                 elif rnd >= 5:
+                    self.debug(f"No consensus reached after 5 rounds, committing empty set {common_choices}")
                     self.get_router().send_req(self._pids, QProc.M_COMMIT, {"choices": common_choices})
                     break
 
@@ -100,15 +106,15 @@ class QProc(Process):
                 # and ask all relevant procs to share their perceptions with everyone else. Wait for them to share their
                 # perceptions. Then proceed to next round
                 else:
-                    pids = list(pid_to_choices_dict.keys())
-                    choices_set = [pid_to_choices_dict[p] for p in pids]
-                    relevant_pids = {pids[i] for _, idxs in self._engine.largest_intersecting_subsets(choices_set) for i in idxs}
-                    await_relevant = CountSpecificAcksResponseAccumulator(relevant_pids)
-                    self.get_router().send_req(list(relevant_pids), QProc.M_INIT_PER_EXC, dict(), await_relevant)
-                    await_relevant.wait_for()
+                    self.debug(f"No consensus, sending M_INIT_PER_EXC to exchange perceptions...")
+                    await_all = CountXAcksResponseAccumulator(len(self._pids))
+                    self.get_router().send_req(self._pids, QProc.M_INIT_PER_EXC, dict(), await_all)
+                    await_all.wait_for()
+                    self.debug(f"Perception exchange complete!")
 
     def _get_choices_req_handler(self, src_pid: str, broadcast_id: int):
         self._latest_choices, self._latest_choices_context = self._engine.get_choices()
+        self.debug(f"Computed choices {self._latest_choices} with context {self._latest_choices_context}, replying...")
         self.get_router().send_res(src_pid, broadcast_id, {"choices": self._latest_choices})
 
     def _commit_handler(self, src_pid: str, choices: Any):
@@ -117,17 +123,21 @@ class QProc(Process):
         self._final_choices = choices
         self._final_choices_cond.notify_all()
         self._final_choices_lock.release()
+        self.debug(f"Commited {choices}!")
 
     def _init_perception_exchange_handler(self, src_pid: str, broadcast_id: int):
         # Send my perception to everyone except myself, wait for ACKs, then ACK to leader that I'm done sharing perception
+        self.debug(f"Broadcasting own perception context: {self._latest_choices_context}, choices: {self._latest_choices}")
         await_all = CountXAcksResponseAccumulator(self._N - 1)
         self.get_router().send_req(self._other_pids, QProc.M_PER_EXC, {"context": self._latest_choices_context, "choices": self._latest_choices}, await_all)
         await_all.wait_for()
+        self.debug(f"Everyone ACKed my perception broadcast!")
         self.get_router().send_res(src_pid, broadcast_id, dict())
 
     def _perception_exchange_handler(self, src_pid: str, broadcast_id: int, context: Any, choices: Any):
         # Add the provided context to my choice engine and ACK the context sender
         self._engine.add_context(src_pid, context, choices)
+        self.debug(f"Context {context} from {src_pid} added, replying to perception exchange...")
         self.get_router().send_res(src_pid, broadcast_id, dict())
 
     """============== PUBLIC =============="""
@@ -144,6 +154,51 @@ class QProc(Process):
             temp = self._final_choices
         self._final_choices_lock.release()
         return temp
+
+
+class PreferenceOrderEngine(ChoiceEngine):
+    """
+    Everyone ranks choices from 0 to len(choices). Context is this ranking. Choice is the lowest sum of rankings
+    across accumulated contexts. This engine is meant to converge in the non-byzantine setting at worst in the second
+    round, making it good for testing the surrounding code
+    """
+    def __init__(self, D: frozenset[str], preference_order: list[str], own_pid: str):
+        self.__D = D
+        self.__preference_orders: dict[str, list[str]] = dict()
+        self.__preference_orders[own_pid] = preference_order
+        self.__own_pid = own_pid
+
+    def get_choices(self) -> tuple[frozenset[str], list[str]]:
+        summed_orders = dict()
+        for pid in self.__preference_orders:
+            for i in range(len(self.__preference_orders[pid])):
+                choice_val = self.__preference_orders[pid][i]
+                if choice_val not in summed_orders:
+                    summed_orders[choice_val] = 0
+                summed_orders[choice_val] += i
+        min_choice_sum = min(summed_orders.values())
+        choices = [c for c in summed_orders if summed_orders[c] == min_choice_sum]
+        self.debug(f"get_choices computation: SUMMED_ORDERS: {summed_orders}, PREFERENCE_ORDERS: {self.__preference_orders}, CHOICES: {choices}")
+        return frozenset(choices), self.__preference_orders[self.__own_pid]
+
+    def add_context(self, src_pid: str, context: list[str], choices: frozenset[str]):
+        self.__preference_orders[src_pid] = context
+
+    def compute_intersection(self, choice_sets: set[frozenset[str]]) -> frozenset[str]:
+        choice_sets_list = list(choice_sets)
+        cur_choice_set = choice_sets_list[0]
+        for i in range(1, len(choice_sets_list)):
+            cur_choice_set = cur_choice_set.intersection(choice_sets_list[i])
+        return cur_choice_set
+
+    def largest_intersecting_subsets(self, choice_sets: list[frozenset[str]]) -> list[tuple[frozenset[str], set[int]]]:
+        pass
+
+    def is_choice_set_empty(self, choices: frozenset[str]):
+        return len(choices) == 0
+
+    def is_subset(self, choices: frozenset[str], of_choices: frozenset[str]):
+        return of_choices.issubset(choices)
 
 
 class DiscreteLLMContextEngine(ChoiceEngine):

@@ -87,7 +87,7 @@ class Router:
                 if accum_tup[2] == accum_tup[1]:
                     self.__accumulators.pop(payload["broadcast_id"])
 
-    def add_handler(self, message_type: str, on_recv: Callable[[str, Any, ...], None]):
+    def add_handler(self, message_type: str, on_recv: Callable[[str, int, Any, ...], None]):
         self.__req_handlers[message_type] = on_recv
 
 #####################################################
@@ -128,7 +128,7 @@ class CountXAcksResponseAccumulator(ResponseAccumulator):
             self.__cond.notify_all()
         self.__lock.release()
 
-    def wait_for(self) -> Any:
+    def wait_for(self) -> dict[str, dict]:
         self.__lock.acquire()
         if not self.__is_done:
             self.__cond.wait()
@@ -156,7 +156,7 @@ class CountSpecificAcksResponseAccumulator(ResponseAccumulator):
             self.__cond.notify_all()
         self.__lock.release()
 
-    def wait_for(self) -> Any:
+    def wait_for(self) -> dict[str, dict]:
         self.__lock.acquire()
         if not self.__is_done:
             self.__cond.wait()
