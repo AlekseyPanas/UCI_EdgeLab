@@ -50,11 +50,11 @@ class QProc(Process):
     M_PER_EXC = "PEX"
     M_PER_EXC_RES = "PEX_res"
 
-    def __init__(self, pid: str, router: Router, pids: list[str], leader_pid: str, choice_engine: ChoiceEngine):
+    def __init__(self, pid: str, router: Router, leader_pid: str, choice_engine: ChoiceEngine):
         super().__init__(pid, router)
         self._engine = choice_engine
         self._leader_pid = leader_pid
-        self._pids = pids
+        self._pids = list(self._router.get_links().keys())
         self._N = len(self._pids)
         self._is_leader = self._pid == leader_pid
 
@@ -117,7 +117,7 @@ class QProc(Process):
         self.debug(f"Computed choices {self._latest_choices} with context {self._latest_choices_context}, replying...")
         self.get_router().send_res(src_pid, broadcast_id, {"choices": self._latest_choices})
 
-    def _commit_handler(self, src_pid: str, choices: Any):
+    def _commit_handler(self, src_pid: str, broadcast_id: int, choices: Any):
         # We are done! Save the final decided choice set and notify anyone waiting
         self._final_choices_lock.acquire()
         self._final_choices = choices
@@ -131,7 +131,7 @@ class QProc(Process):
         await_all = CountXAcksResponseAccumulator(self._N - 1)
         self.get_router().send_req(self._other_pids, QProc.M_PER_EXC, {"context": self._latest_choices_context, "choices": self._latest_choices}, await_all)
         await_all.wait_for()
-        self.debug(f"Everyone ACKed my perception broadcast!")
+        self.debug(f"Everyone ACKed my perception broadcast! Replying to leader...")
         self.get_router().send_res(src_pid, broadcast_id, dict())
 
     def _perception_exchange_handler(self, src_pid: str, broadcast_id: int, context: Any, choices: Any):
@@ -178,7 +178,7 @@ class PreferenceOrderEngine(ChoiceEngine):
                 summed_orders[choice_val] += i
         min_choice_sum = min(summed_orders.values())
         choices = [c for c in summed_orders if summed_orders[c] == min_choice_sum]
-        self.debug(f"get_choices computation: SUMMED_ORDERS: {summed_orders}, PREFERENCE_ORDERS: {self.__preference_orders}, CHOICES: {choices}")
+        print(f"get_choices computation: SUMMED_ORDERS: {summed_orders}, PREFERENCE_ORDERS: {self.__preference_orders}, CHOICES: {choices}")
         return frozenset(choices), self.__preference_orders[self.__own_pid]
 
     def add_context(self, src_pid: str, context: list[str], choices: frozenset[str]):

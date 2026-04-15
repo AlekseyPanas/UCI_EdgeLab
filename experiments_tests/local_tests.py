@@ -4,13 +4,14 @@ from experiments_tests.local_util import create_fully_connected_local_procs
 from router.router import Router, LocalLink
 from proc.hello_proc import HelloProcess
 from proc.constrained_consensus_proc import ConstrainedConsensusProc
-from proc.QProc import QProc, DiscreteLLMContextEngine
+from proc.QProc import QProc, DiscreteLLMContextEngine, PreferenceOrderEngine
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from threading import Thread, Lock, Condition
 from visualization.interval_visualizer import IntervalVisualizer
 from util.util import do_intervals_intersect
 import time
+import random
 
 
 def hello_test():
@@ -110,8 +111,17 @@ def constrained_test():
 
 
 def qproc_engine_test():
-    engine = DiscreteLLMContextEngine()
-    print(engine.largest_intersecting_subsets([frozenset({"1", "2"}), frozenset({"2", "3"}), frozenset({"4"})]))
+    choices = frozenset(["Taco Bell", "McDonalds", "Wendys"])
+    engines = []
+    for i in range(3):
+        pref_order = list(choices)
+        random.shuffle(pref_order)
+        engines.append(PreferenceOrderEngine(choices, pref_order, str(i+1)))
+    PROCS = create_fully_connected_local_procs(QProc, ["1", "2", "3"], [{"leader_pid": "1", "choice_engine": engines[i]} for i in range(3)])
+
+    for pid in PROCS:
+        proc: QProc = PROCS[pid]
+        proc.start()
 
 
 if __name__ == "__main__":
